@@ -51,6 +51,7 @@ WORKDIR /app
 
 COPY --from=builder /tmp/gproxy /usr/local/bin/gproxy
 COPY --from=builder /tmp/app/data /app/data
+COPY gproxy.toml /app/gproxy.toml
 
 ENV GPROXY_HOST=0.0.0.0
 ENV GPROXY_PORT=8787

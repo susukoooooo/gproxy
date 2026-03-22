@@ -1,0 +1,68 @@
+# gproxy config – claudecode + codex OAuth channels
+
+[global]
+host = "127.0.0.1"
+port = 8787
+proxy = ""
+update_source = "github"
+admin_key = ""
+mask_sensitive_info = true
+data_dir = "./data"
+dsn = "sqlite://./data/gproxy.db?mode=rwc"
+
+# ---- Claude Code (OAuth) ----
+[[channels]]
+id = "claudecode"
+enabled = true
+
+[channels.settings]
+base_url = "https://api.anthropic.com"
+claudecode_ai_base_url = "https://claude.ai"
+claudecode_platform_base_url = "https://platform.claude.com"
+claudecode_append_beta_query = false
+cache_breakpoints = [
+  { target = "top_level", ttl = "auto" },
+  { target = "messages", position = "last_nth", index = 11, ttl = "1h" },
+  { target = "messages", position = "last_nth", index = 2, ttl = "1h" },
+  { target = "messages", position = "last_nth", index = 1, ttl = "1h" },
+]
+
+[[channels.credentials]]
+id = "claudecode-user-1"
+label = "oauth/cookie"
+
+[channels.credentials.builtin.ClaudeCode]
+access_token = ""
+refresh_token = ""
+expires_at = 0
+subscription_type = ""
+rate_limit_tier = ""
+cookie = ""
+user_email = ""
+
+[channels.credentials.state.health]
+kind = "healthy"
+
+# ---- Codex (OAuth) ----
+[[channels]]
+id = "codex"
+enabled = true
+
+[channels.settings]
+base_url = "https://chatgpt.com/backend-api/codex"
+oauth_issuer_url = "https://auth.openai.com"
+
+[[channels.credentials]]
+id = "codex-user-1"
+label = "oauth"
+
+[channels.credentials.builtin.Codex]
+access_token = ""
+refresh_token = ""
+id_token = ""
+user_email = ""
+account_id = ""
+expires_at = 0
+
+[channels.credentials.state.health]
+kind = "healthy"
