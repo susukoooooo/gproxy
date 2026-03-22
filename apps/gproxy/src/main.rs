@@ -3,12 +3,14 @@ use std::future::IntoFuture;
 use anyhow::{Result, anyhow};
 use axum::Router;
 use axum::extract::DefaultBodyLimit;
+use axum::http::HeaderName;
 use axum::middleware::from_fn_with_state;
 use axum::routing::get;
 use gproxy_core::management_router;
 use gproxy_storage::StorageWriteSinkError;
 use tokio::net::TcpListener;
 use tokio::task::{JoinError, JoinHandle};
+use tower_http::cors::{AllowHeaders, AllowMethods, AllowOrigin, CorsLayer, ExposeHeaders};
 
 use crate::bootstrap::runtime::Bootstrap;
 
@@ -148,6 +150,14 @@ async fn main() -> Result<()> {
     println!("password: {password}");
     println!("========================================");
 
+    let cors = CorsLayer::new()
+        .allow_origin(AllowOrigin::any())
+        .allow_methods(AllowMethods::any())
+        .allow_headers(AllowHeaders::any())
+        .expose_headers(ExposeHeaders::list([
+            HeaderName::from_static("x-request-id"),
+        ]));
+
     let app = Router::new()
         .route("/favicon.ico", get(admin_ui::favicon))
         .route("/", get(admin_ui::index))
@@ -157,6 +167,7 @@ async fn main() -> Result<()> {
             state.clone(),
             middleware::downstream_event::middleware,
         ))
+        .layer(cors)
         .layer(DefaultBodyLimit::max(MAX_AXUM_BODY_BYTES));
     let listener = TcpListener::bind(&bind_addr).await?;
     let server = axum::serve(listener, app)
