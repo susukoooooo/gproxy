@@ -20,12 +20,6 @@ base_url = "https://api.anthropic.com"
 claudecode_ai_base_url = "https://claude.ai"
 claudecode_platform_base_url = "https://platform.claude.com"
 claudecode_append_beta_query = false
-cache_breakpoints = [
-  { target = "top_level", ttl = "auto" },
-  { target = "messages", position = "last_nth", index = 11, ttl = "1h" },
-  { target = "messages", position = "last_nth", index = 2, ttl = "1h" },
-  { target = "messages", position = "last_nth", index = 1, ttl = "1h" },
-]
 
 [[channels.credentials]]
 id = "claudecode-user-1"
