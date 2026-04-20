@@ -40,6 +40,8 @@ pub struct UpstreamConfig {
     pub inject_claude_code_identity: bool,
     #[serde(default = "default_api_base")]
     pub api_base_url: String,
+    #[serde(default = "default_oauth_base")]
+    pub oauth_base_url: String,
     #[serde(default = "default_claude_ai_base")]
     pub claude_ai_base_url: String,
 }
@@ -51,6 +53,7 @@ impl Default for UpstreamConfig {
             stats_db: default_stats_db(),
             inject_claude_code_identity: true,
             api_base_url: default_api_base(),
+            oauth_base_url: default_oauth_base(),
             claude_ai_base_url: default_claude_ai_base(),
         }
     }
@@ -73,6 +76,10 @@ fn default_true() -> bool {
 }
 fn default_api_base() -> String {
     "https://api.anthropic.com".into()
+}
+fn default_oauth_base() -> String {
+    // OAuth token endpoint is served from platform.claude.com.
+    "https://platform.claude.com".into()
 }
 fn default_claude_ai_base() -> String {
     "https://claude.ai".into()

@@ -254,7 +254,7 @@ async fn ensure_access_token(state: &AppState) -> Result<String> {
             return Ok(t.access_token);
         }
         debug!("refreshing token");
-        let refreshed = oauth::refresh(&state.client, &state.upstream.api_base_url, &t.refresh_token)
+        let refreshed = oauth::refresh(&state.client, &state.upstream.oauth_base_url, &t.refresh_token)
             .await
             .context("refresh access token")?;
         let mut new_tokens = Tokens {

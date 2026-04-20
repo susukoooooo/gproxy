@@ -83,7 +83,7 @@ async fn login(cfg: &Config) -> Result<()> {
 
     let mut tokens = oauth::exchange_code(
         &client,
-        &cfg.upstream.api_base_url,
+        &cfg.upstream.oauth_base_url,
         &cfg.upstream.claude_ai_base_url,
         &pkce.verifier,
         &code,

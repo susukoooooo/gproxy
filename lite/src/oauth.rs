@@ -15,12 +15,13 @@ use crate::tokens::Tokens;
 
 pub const CLIENT_ID: &str = "9d1c250a-e61b-44d9-88ed-5944d1962f5e";
 pub const REDIRECT_URI: &str = "https://platform.claude.com/oauth/code/callback";
-pub const SCOPE: &str = "user:profile user:inference user:sessions:claude_code";
+pub const SCOPE: &str = "org:create_api_key user:profile user:inference user:sessions:claude_code user:mcp_servers user:file_upload";
 pub const OAUTH_BETA: &str = "oauth-2025-04-20";
 pub const ANTHROPIC_API_VERSION: &str = "2023-06-01";
 pub const TOKEN_UA: &str = "claude-cli/2.1.77 (external, cli)";
 pub const CLAUDE_CODE_UA: &str = "claude-code/2.1.77 (external, cli)";
-pub const REFRESH_SKEW_MS: u64 = 60_000;
+/// Refresh proactively when the access token has <5 minutes left.
+pub const REFRESH_SKEW_MS: u64 = 300_000;
 
 pub struct Pkce {
     pub verifier: String,
@@ -88,7 +89,7 @@ struct TokenResponse {
 
 pub async fn exchange_code(
     client: &reqwest::Client,
-    api_base: &str,
+    oauth_base: &str,
     claude_ai_base: &str,
     pkce_verifier: &str,
     code: &str,
@@ -108,7 +109,7 @@ pub async fn exchange_code(
     );
 
     let origin = claude_ai_base.trim_end_matches('/');
-    let url = format!("{}/v1/oauth/token", api_base.trim_end_matches('/'));
+    let url = format!("{}/v1/oauth/token", oauth_base.trim_end_matches('/'));
     let resp = client
         .post(&url)
         .header("anthropic-version", ANTHROPIC_API_VERSION)
@@ -141,7 +142,7 @@ pub async fn exchange_code(
 
 pub async fn refresh(
     client: &reqwest::Client,
-    api_base: &str,
+    oauth_base: &str,
     refresh_token: &str,
 ) -> Result<Tokens> {
     let body = format!(
@@ -149,7 +150,7 @@ pub async fn refresh(
         urlencoding::encode(CLIENT_ID),
         urlencoding::encode(refresh_token),
     );
-    let url = format!("{}/v1/oauth/token", api_base.trim_end_matches('/'));
+    let url = format!("{}/v1/oauth/token", oauth_base.trim_end_matches('/'));
 
     let resp = client
         .post(&url)
