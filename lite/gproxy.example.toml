@@ -1,0 +1,26 @@
+# gproxy-lite config
+#
+# Copy to gproxy.toml and edit `client_key` before running.
+
+[server]
+host = "127.0.0.1"
+port = 8787
+# Pick any string; your client uses this as its API key when talking to the proxy.
+client_key = "sk-lite-change-me"
+
+[upstream]
+# OAuth tokens are stored here (auto-refreshed; created by `gproxy-lite login`).
+tokens_file = "./data/tokens.json"
+
+# SQLite file for request/usage logs.
+stats_db = "./data/stats.db"
+
+# Prepend "You are Claude Code, Anthropic's official CLI for Claude." to `system`.
+# Claude OAuth tokens are generally expected to come from Claude Code; without
+# this identity the upstream may reject or throttle. Keep `true` unless you know
+# what you're doing.
+inject_claude_code_identity = true
+
+# Advanced — rarely need to change.
+api_base_url = "https://api.anthropic.com"
+claude_ai_base_url = "https://claude.ai"
