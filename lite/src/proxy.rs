@@ -13,6 +13,7 @@ use bytes::Bytes;
 use futures::StreamExt;
 use reqwest::Client;
 use serde_json::Value;
+use sha2::{Digest, Sha256};
 use tokio::sync::Mutex;
 use tracing::{debug, warn};
 
@@ -24,6 +25,17 @@ use crate::stats::{RequestLog, Stats};
 use crate::tokens::{TokenStore, Tokens};
 
 const CLAUDE_CODE_PRELUDE: &str = "You are Claude Code, Anthropic's official CLI for Claude.";
+
+// Betas that must be present on every /v1/messages request; client-supplied
+// betas are merged on top.
+const REQUIRED_BETAS: &[&str] = &[OAUTH_BETA, "claude-code-20250219"];
+
+// Billing header disguised as a system block (Claude Code 2.1.76+).
+const CLAUDE_CODE_VERSION: &str = "2.1.77";
+const BILLING_HEADER_PREFIX: &str = "x-anthropic-billing-header:";
+const BILLING_ENTRYPOINT: &str = "cli";
+const BILLING_SALT: &str = "59cf53e54c78";
+const BILLING_CCH: &str = "00000";
 
 #[derive(Clone)]
 pub struct AppState {
@@ -84,12 +96,12 @@ pub async fn handle(
         .header("anthropic-version", ANTHROPIC_API_VERSION)
         .header("user-agent", CLAUDE_CODE_UA);
 
-    // Forward client's anthropic-beta (merged with oauth beta), drop hop-by-hop.
+    // Forward client's anthropic-beta, ensuring the betas Claude Code always sends are present.
     let forwarded_beta = headers
         .get("anthropic-beta")
         .and_then(|v| v.to_str().ok())
         .unwrap_or("");
-    let merged_beta = merge_beta(forwarded_beta, OAUTH_BETA);
+    let merged_beta = merge_betas(forwarded_beta, REQUIRED_BETAS);
     req = req.header("anthropic-beta", merged_beta);
 
     // Forward a minimal set of request headers (non-auth).
@@ -279,9 +291,13 @@ fn transform_body(
         return (body.clone(), None);
     };
 
+    // Apply prelude first; billing header goes in second, so it ends up at
+    // system[0] (required) with the prelude at system[1].
     if upstream.inject_claude_code_identity {
         inject_claude_code_system(&mut json);
     }
+    inject_billing_header(&mut json);
+
     let model = json
         .get("model")
         .and_then(Value::as_str)
@@ -341,16 +357,126 @@ fn system_has_known_prelude(system: Option<&Value>) -> bool {
     }
 }
 
-fn merge_beta(incoming: &str, required: &str) -> String {
+fn merge_betas(incoming: &str, required: &[&str]) -> String {
     let mut out: Vec<String> = incoming
         .split(',')
         .map(|s| s.trim().to_string())
         .filter(|s| !s.is_empty())
         .collect();
-    if !out.iter().any(|s| s.eq_ignore_ascii_case(required)) {
-        out.push(required.to_string());
+    for r in required {
+        if !out.iter().any(|s| s.eq_ignore_ascii_case(r)) {
+            out.push((*r).to_string());
+        }
     }
     out.join(",")
+}
+
+/// Insert the Claude Code billing header as the *first* block of `system`.
+/// The version hash is derived from UTF-16 code units 4/7/20 of the first
+/// user-message text, salted and SHA-256'd — matching the official CLI.
+fn inject_billing_header(body: &mut Value) {
+    let user_text = first_user_text(body);
+    let Some(map) = body.as_object_mut() else {
+        return;
+    };
+    if system_has_billing_header(map.get("system")) {
+        return;
+    }
+
+    let version_hash = billing_version_hash(&user_text);
+    let header_text = format!(
+        "{} cc_version={}.{}; cc_entrypoint={}; cch={};",
+        BILLING_HEADER_PREFIX, CLAUDE_CODE_VERSION, version_hash, BILLING_ENTRYPOINT, BILLING_CCH,
+    );
+    let header_block = serde_json::json!({ "type": "text", "text": header_text });
+
+    match map.remove("system") {
+        Some(Value::Array(mut blocks)) => {
+            blocks.retain(|b| !is_billing_header_block(b));
+            blocks.insert(0, header_block);
+            map.insert("system".into(), Value::Array(blocks));
+        }
+        Some(Value::String(text)) => {
+            map.insert(
+                "system".into(),
+                Value::Array(vec![
+                    header_block,
+                    serde_json::json!({ "type": "text", "text": text }),
+                ]),
+            );
+        }
+        Some(other) => {
+            let mut blocks = vec![header_block];
+            if !is_billing_header_block(&other) {
+                blocks.push(other);
+            }
+            map.insert("system".into(), Value::Array(blocks));
+        }
+        None => {
+            map.insert("system".into(), Value::Array(vec![header_block]));
+        }
+    }
+}
+
+fn system_has_billing_header(system: Option<&Value>) -> bool {
+    match system {
+        Some(Value::Array(blocks)) => blocks.iter().any(is_billing_header_block),
+        Some(v) => is_billing_header_block(v),
+        None => false,
+    }
+}
+
+fn is_billing_header_block(block: &Value) -> bool {
+    block
+        .as_object()
+        .and_then(|m| m.get("text"))
+        .and_then(Value::as_str)
+        .map(str::trim_start)
+        .is_some_and(|text| text.starts_with(BILLING_HEADER_PREFIX))
+}
+
+fn first_user_text(body: &Value) -> String {
+    let Some(messages) = body.get("messages").and_then(Value::as_array) else {
+        return String::new();
+    };
+    for msg in messages {
+        let Some(obj) = msg.as_object() else { continue };
+        if obj.get("role").and_then(Value::as_str) != Some("user") {
+            continue;
+        }
+        if let Some(content) = obj.get("content") {
+            if let Some(t) = content.as_str() {
+                return t.to_string();
+            }
+            if let Some(arr) = content.as_array() {
+                for b in arr {
+                    if b.get("type").and_then(Value::as_str) == Some("text") {
+                        if let Some(t) = b.get("text").and_then(Value::as_str) {
+                            return t.to_string();
+                        }
+                    }
+                }
+            }
+        }
+    }
+    String::new()
+}
+
+fn billing_version_hash(user_text: &str) -> String {
+    let utf16: Vec<u16> = user_text.encode_utf16().collect();
+    let mut sampled = String::new();
+    for idx in [4usize, 7, 20] {
+        match utf16.get(idx).copied() {
+            Some(unit) => {
+                sampled.push(char::from_u32(unit as u32).unwrap_or(char::REPLACEMENT_CHARACTER))
+            }
+            None => sampled.push('0'),
+        }
+    }
+    let seed = format!("{BILLING_SALT}{sampled}{CLAUDE_CODE_VERSION}");
+    let digest = Sha256::digest(seed.as_bytes());
+    let hex = format!("{digest:x}");
+    hex[..3.min(hex.len())].to_string()
 }
 
 fn extract_usage(bytes: &Bytes) -> (Option<i64>, Option<i64>) {

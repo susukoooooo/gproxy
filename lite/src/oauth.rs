@@ -18,8 +18,8 @@ pub const REDIRECT_URI: &str = "https://platform.claude.com/oauth/code/callback"
 pub const SCOPE: &str = "user:profile user:inference user:sessions:claude_code";
 pub const OAUTH_BETA: &str = "oauth-2025-04-20";
 pub const ANTHROPIC_API_VERSION: &str = "2023-06-01";
-pub const TOKEN_UA: &str = "claude-cli/2.1.76 (external, cli)";
-pub const CLAUDE_CODE_UA: &str = "claude-code/2.1.76";
+pub const TOKEN_UA: &str = "claude-cli/2.1.77 (external, cli)";
+pub const CLAUDE_CODE_UA: &str = "claude-code/2.1.77 (external, cli)";
 pub const REFRESH_SKEW_MS: u64 = 60_000;
 
 pub struct Pkce {
